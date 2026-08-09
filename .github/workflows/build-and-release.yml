@@ -1,184 +1,278 @@
 name: Build and Release APK
 
 on:
-  push:
-    tags:
-      - "v*"
-  workflow_dispatch:
+push:
+tags:
+- "v*"
+workflow_dispatch:
 
 permissions:
-  contents: write
+contents: write
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+build:
+runs-on: ubuntu-latest
 
+env:
+  KEYSTORE_FILE: android/app/release.keystore
+  KEYSTORE_PASSWORD: Julianaifeoma$2007
+  KEY_ALIAS: release
+  KEY_PASSWORD: Julianaifeoma$2007
+
+steps:
+
+  # ---------------------------------------------------------
+  # Checkout source code
+  # ---------------------------------------------------------
+  - name: Checkout
+    uses: actions/checkout@v4
+
+  # ---------------------------------------------------------
+  # Node.js
+  # ---------------------------------------------------------
+  - name: Setup Node.js
+    uses: actions/setup-node@v4
+    with:
+      node-version: "20"
+
+  # ---------------------------------------------------------
+  # Java 17
+  # ---------------------------------------------------------
+  - name: Setup Java
+    uses: actions/setup-java@v4
+    with:
+      distribution: "temurin"
+      java-version: "17"
+
+  # ---------------------------------------------------------
+  # Install npm dependencies
+  # ---------------------------------------------------------
+  - name: Install dependencies
+    run: npm install --legacy-peer-deps
+
+  # ---------------------------------------------------------
+  # Verify Vite and source entry
+  # ---------------------------------------------------------
+  - name: Verify Vite project
+    run: |
+      echo "Checking project structure..."
+      echo "Current directory:"
+      pwd
+
+      echo ""
+      echo "Root files:"
+      ls -la
+
+      echo ""
+      echo "src files:"
+      ls -la src
+
+      echo ""
+      if [ ! -f "src/index.html" ]; then
+        echo "ERROR: src/index.html was not found."
+        exit 1
+      fi
+
+      echo "src/index.html found."
+
+      if [ ! -d "node_modules/vite" ]; then
+        echo "ERROR: Vite is not installed."
+        exit 1
+      fi
+
+      echo "Vite installation found."
+      npx vite --version
+
+  # ---------------------------------------------------------
+  # Build web app
+  #
+  # index.html is inside src/, so explicitly tell Vite
+  # that src/ is the project root.
+  # ---------------------------------------------------------
+  - name: Build web app
+    run: |
+      rm -rf dist
+
+      npx vite build --root src --outDir ../dist
+
+      echo ""
+      echo "Vite build completed."
+
+      if [ ! -d "dist" ]; then
+        echo "ERROR: dist directory was not created."
+        exit 1
+      fi
+
+      if [ ! -f "dist/index.html" ]; then
+        echo "ERROR: dist/index.html was not created."
+        exit 1
+      fi
+
+      echo "Build output:"
+      find dist -maxdepth 2 -type f | sort
+
+  # ---------------------------------------------------------
+  # Configure Capacitor web directory
+  # ---------------------------------------------------------
+  - name: Configure Capacitor web directory
+    run: |
+      if [ -f "capacitor.config.json" ]; then
+        node <<'NODE'
+      const fs = require("fs");
+
+      const file = "capacitor.config.json";
+      const config = JSON.parse(fs.readFileSync(file, "utf8"));
+
+      config.webDir = "dist";
+
+      fs.writeFileSync(
+        file,
+        JSON.stringify(config, null, 2) + "\n"
+      );
+
+      console.log("Updated capacitor.config.json:");
+      console.log(JSON.stringify(config, null, 2));
+      NODE
+
+      elif [ -f "capacitor.config.ts" ]; then
+        echo "capacitor.config.ts detected."
+        echo "Please ensure webDir is set to 'dist'."
+
+      else
+        echo "ERROR: No Capacitor configuration file found."
+        exit 1
+      fi
+
+  # ---------------------------------------------------------
+  # Add Android platform if it doesn't already exist
+  # ---------------------------------------------------------
+  - name: Add Android platform
+    run: |
+      if [ ! -d "android" ]; then
+        echo "Android platform not found."
+        npx cap add android
+      else
+        echo "Android platform already exists."
+      fi
+
+  # ---------------------------------------------------------
+  # Sync Capacitor
+  # ---------------------------------------------------------
+  - name: Sync Capacitor
+    run: npx cap sync android
+
+  # ---------------------------------------------------------
+  # Check whether keystore exists
+  # ---------------------------------------------------------
+  - name: Check signing keystore
+    id: check_keystore
+    run: |
+      if [ -f "$KEYSTORE_FILE" ]; then
+        echo "exists=true" >> "$GITHUB_OUTPUT"
+        echo "Signing keystore found."
+      else
+        echo "exists=false" >> "$GITHUB_OUTPUT"
+        echo "Signing keystore not found."
+      fi
+
+  # ---------------------------------------------------------
+  # Generate keystore if it doesn't exist
+  # ---------------------------------------------------------
+  - name: Generate signing keystore
+    if: steps.check_keystore.outputs.exists == 'false'
+    run: |
+      if [ -z "$KEYSTORE_PASSWORD" ]; then
+        echo "ERROR: KEYSTORE_PASSWORD is empty."
+        exit 1
+      fi
+
+      if [ -z "$KEY_PASSWORD" ]; then
+        echo "ERROR: KEY_PASSWORD is empty."
+        exit 1
+      fi
+
+      mkdir -p android/app
+
+      keytool -genkeypair -v \
+        -keystore "$KEYSTORE_FILE" \
+        -alias "$KEY_ALIAS" \
+        -keyalg RSA \
+        -keysize 2048 \
+        -validity 10000 \
+        -storepass "$KEYSTORE_PASSWORD" \
+        -keypass "$KEY_PASSWORD" \
+        -dname "CN=Solana Wallet, OU=Dev, O=Solana Wallet, L=City, S=State, C=NG"
+
+      echo "Signing keystore generated successfully."
+
+  # ---------------------------------------------------------
+  # Build signed release APK
+  # ---------------------------------------------------------
+  - name: Build signed release APK
+    working-directory: android
+    run: |
+      chmod +x gradlew
+
+      ./gradlew assembleRelease \
+        -Pandroid.injected.signing.store.file="$GITHUB_WORKSPACE/$KEYSTORE_FILE" \
+        -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+        -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+        -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+
+  # ---------------------------------------------------------
+  # Verify APK exists
+  # ---------------------------------------------------------
+  - name: Verify APK
+    run: |
+      APK="android/app/build/outputs/apk/release/app-release.apk"
+
+      if [ ! -f "$APK" ]; then
+        echo "ERROR: APK was not generated."
+        exit 1
+      fi
+
+      echo "APK generated successfully:"
+      ls -lh "$APK"
+
+  # ---------------------------------------------------------
+  # Verify APK signature
+  # ---------------------------------------------------------
+  - name: Verify APK signature
+    run: |
+      APK="android/app/build/outputs/apk/release/app-release.apk"
+
+      APKSIGNER=$(find "$ANDROID_HOME/build-tools" \
+        -name apksigner \
+        -type f \
+        | sort -V \
+        | tail -n 1)
+
+      if [ -n "$APKSIGNER" ]; then
+        echo "Using: $APKSIGNER"
+        "$APKSIGNER" verify --verbose "$APK"
+      else
+        echo "apksigner not found."
+        echo "Skipping explicit signature verification."
+      fi
+
+  # ---------------------------------------------------------
+  # Upload APK as GitHub Actions artifact
+  # ---------------------------------------------------------
+  - name: Upload signed APK
+    uses: actions/upload-artifact@v4
+    with:
+      name: solana-wallet-release
+      path: android/app/build/outputs/apk/release/app-release.apk
+      if-no-files-found: error
+
+  # ---------------------------------------------------------
+  # Create GitHub Release for version tags
+  # ---------------------------------------------------------
+  - name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    uses: softprops/action-gh-release@v2
+    with:
+      files: android/app/build/outputs/apk/release/app-release.apk
+      generate_release_notes: true
     env:
-      KEYSTORE_FILE: android/app/release.keystore
-      KEYSTORE_PASSWORD: Julianaifeoma$2007
-      KEY_ALIAS: release
-      KEY_PASSWORD: Julianaifeoma$2007
-
-    steps:
-
-      # ---------------------------------------------------------
-      # Checkout source code
-      # ---------------------------------------------------------
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # ---------------------------------------------------------
-      # Node.js
-      # ---------------------------------------------------------
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      # ---------------------------------------------------------
-      # Java 17
-      # ---------------------------------------------------------
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: "temurin"
-          java-version: "17"
-
-      # ---------------------------------------------------------
-      # Install npm dependencies
-      # ---------------------------------------------------------
-      - name: Install dependencies
-        run: npm install --legacy-peer-deps
-
-      # ---------------------------------------------------------
-      # Build web app (Required for Capacitor)
-      # ---------------------------------------------------------
-      - name: Build web app
-        run: npm run build
-
-      # ---------------------------------------------------------
-      # Add Android platform if it doesn't already exist
-      # ---------------------------------------------------------
-      - name: Add Android platform
-        run: |
-          if [ ! -d "android" ]; then
-            echo "Android platform not found."
-            npx cap add android
-          else
-            echo "Android platform already exists."
-          fi
-
-      # ---------------------------------------------------------
-      # Sync Capacitor
-      # ---------------------------------------------------------
-      - name: Sync Capacitor
-        run: npx cap sync android
-
-      # ---------------------------------------------------------
-      # Check whether keystore exists
-      # ---------------------------------------------------------
-      - name: Check signing keystore
-        id: check_keystore
-        run: |
-          if [ -f "$KEYSTORE_FILE" ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Signing keystore found."
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Signing keystore not found."
-          fi
-
-      # ---------------------------------------------------------
-      # Generate keystore if it doesn't exist
-      # ---------------------------------------------------------
-      - name: Generate signing keystore
-        if: steps.check_keystore.outputs.exists == 'false'
-        run: |
-          if [ -z "$KEYSTORE_PASSWORD" ]; then
-            echo "ERROR: KEYSTORE_PASSWORD secret is not configured."
-            exit 1
-          fi
-
-          if [ -z "$KEY_PASSWORD" ]; then
-            echo "ERROR: KEY_PASSWORD secret is not configured."
-            exit 1
-          fi
-
-          mkdir -p android/app
-
-          keytool -genkeypair -v \
-            -keystore "$KEYSTORE_FILE" \
-            -alias "$KEY_ALIAS" \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass "$KEYSTORE_PASSWORD" \
-            -keypass "$KEY_PASSWORD" \
-            -dname "CN=Solana Wallet, OU=Dev, O=Solana Wallet, L=City, S=State, C=NG"
-
-          echo "Signing keystore generated successfully."
-
-      # ---------------------------------------------------------
-      # Build signed release APK
-      # ---------------------------------------------------------
-      - name: Build signed release APK
-        working-directory: android
-        run: |
-          chmod +x gradlew
-
-          ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file="$GITHUB_WORKSPACE/$KEYSTORE_FILE" \
-            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
-            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
-            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
-
-      # ---------------------------------------------------------
-      # Verify APK exists
-      # ---------------------------------------------------------
-      - name: Verify APK
-        run: |
-          APK="android/app/build/outputs/apk/release/app-release.apk"
-
-          if [ ! -f "$APK" ]; then
-            echo "ERROR: APK was not generated."
-            exit 1
-          fi
-
-          echo "APK generated successfully:"
-          ls -lh "$APK"
-
-      # ---------------------------------------------------------
-      # Verify APK signature
-      # ---------------------------------------------------------
-      - name: Verify APK signature
-        run: |
-          APK="android/app/build/outputs/apk/release/app-release.apk"
-
-          if command -v apksigner >/dev/null 2>&1; then
-            apksigner verify --verbose "$APK"
-          else
-            echo "apksigner not found in PATH."
-            echo "Skipping explicit signature verification."
-          fi
-
-      # ---------------------------------------------------------
-      # Upload APK as GitHub Actions artifact
-      # ---------------------------------------------------------
-      - name: Upload signed APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: solana-wallet-release
-          path: android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
-
-      # ---------------------------------------------------------
-      # Create GitHub Release for version tags
-      # ---------------------------------------------------------
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: android/app/build/outputs/apk/release/app-release.apk
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
