@@ -1,0 +1,13 @@
+{
+  "feePercentage": 0.1,
+  "feeWalletAddress": "REPLACE_WITH_YOUR_FEE_WALLET_ADDRESS",
+  "rpcEndpoint": "https://api.mainnet-beta.solana.com",
+  "fallbackRpcEndpoints": [
+    "https://rpc.ankr.com/solana"
+  ],
+  "network": "mainnet-beta",
+  "onRampWidgetBaseUrl": "https://buy.moonpay.com",
+  "offRampWidgetBaseUrl": "https://sell.moonpay.com",
+  "onRampApiKeyPlaceholder": "REPLACE_WITH_YOUR_MOONPAY_PUBLIC_API_KEY",
+  "explorerBaseUrl": "https://explorer.solana.com/tx"
+}

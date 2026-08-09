@@ -1,0 +1,31 @@
+name: Generate Android Signing Key
+# Run this ONCE manually (workflow_dispatch) to produce a keystore.
+# Download the artifact, then add its contents as repo secrets:
+#   KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+# After that, delete the keystore artifact from the workflow run — do not
+# leave the raw keystore file sitting in Actions artifacts.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore release.keystore \
+            -alias release \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass "${{ secrets.TEMP_KEYSTORE_PASSWORD }}" \
+            -keypass "${{ secrets.TEMP_KEYSTORE_PASSWORD }}" \
+            -dname "CN=YourApp, OU=Dev, O=YourCompany, L=City, S=State, C=US"
+          base64 -w0 release.keystore > release.keystore.b64
+
+      - name: Upload keystore (download, save as secrets, then delete this artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-keystore
+          path: release.keystore.b64
+          retention-days: 1

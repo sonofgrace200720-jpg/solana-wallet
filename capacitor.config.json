@@ -1,0 +1,9 @@
+{
+  "appId": "com.yourcompany.solanawallet",
+  "appName": "Solana Wallet",
+  "webDir": "src",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": false
+  }
+}

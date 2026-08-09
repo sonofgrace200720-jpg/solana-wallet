@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <!-- Restricts the page to same-origin assets, esm.sh (where dependencies
+       are loaded from — see the import map below), and the specific
+       RPC/fiat-ramp hosts this app talks to. Extend connect-src if you
+       swap in a dedicated RPC provider (Helius/QuickNode) or a different
+       on/off-ramp widget. -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' https://esm.sh;
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data:;
+    connect-src 'self' https://esm.sh https://api.mainnet-beta.solana.com https://rpc.ankr.com https://*.helius-rpc.com https://*.quiknode.pro;
+    frame-src https://buy.moonpay.com https://sell.moonpay.com;
+  " />
+
+  <title>Solana Wallet</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="css/style.css" />
+
+  <!--
+    Import map: resolves the bare specifiers used throughout src/js/*.js
+    (e.g. `import { Keypair } from "@solana/web3.js"`) to real ESM builds
+    on esm.sh, so this app runs directly from static files — no npm
+    install, no bundler, no build step for the web layer.
+
+    This is what makes `npx http-server src` (or literally any static file
+    server) "just work." Keep versions here in sync with package.json,
+    which is still used for the native Android build (`cap sync` reads it
+    to know which Capacitor plugins to link natively).
+
+    For a fully offline-capable production build later, swap this for an
+    esbuild/webpack bundle — but that's an optimization, not a requirement
+    to get the app running.
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@solana/web3.js": "https://esm.sh/@solana/web3.js@1.95.3",
+      "buffer": "https://esm.sh/buffer@6.0.3",
+      "@capacitor/core": "https://esm.sh/@capacitor/core@6.1.2",
+      "@capacitor/preferences": "https://esm.sh/@capacitor/preferences@6.0.2",
+      "@capacitor/browser": "https://esm.sh/@capacitor/browser@6.0.3",
+      "@capacitor-community/barcode-scanner": "https://esm.sh/@capacitor-community/barcode-scanner@4.0.1",
+      "capacitor-native-biometric": "https://esm.sh/capacitor-native-biometric@4.2.1",
+      "jspdf": "https://esm.sh/jspdf@2.5.1",
+      "qrcode": "https://esm.sh/qrcode@1.5.3"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <strong>Wallet</strong>
+      <button id="themeToggle" class="theme-toggle" aria-label="Toggle theme">🌓</button>
+    </div>
+
+    <div class="balance-card">
+      <div class="label">Available balance</div>
+      <div class="amount" id="balanceAmount">— SOL</div>
+    </div>
+
+    <div class="action-row">
+      <button class="btn primary" id="sendBtn">Send</button>
+      <button class="btn" id="receiveBtn">Receive</button>
+      <button class="btn" id="scanBtn">📷 Scan</button>
+    </div>
+
+    <div class="card">
+      <strong>Savings</strong>
+      <div id="savingsBalance" class="label" style="margin-top:6px;">— SOL</div>
+      <div class="action-row" style="margin-top:14px;">
+        <button class="btn" id="depositBtn">Deposit</button>
+        <button class="btn" id="withdrawBtn">Withdraw</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <strong>Cash</strong>
+      <div class="action-row" style="margin-top:14px;">
+        <button class="btn" id="buyBtn">Buy with card/bank</button>
+        <button class="btn" id="sellBtn">Cash out to bank</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <strong>Recent activity</strong>
+      <div id="txList"></div>
+    </div>
+  </div>
+
+  <!-- PIN modal, send modal, receive modal etc. would be built out here;
+       omitted for brevity — see app.js for the wiring pattern (currently
+       browser prompt()/confirm() calls; swap in real modal components for
+       a polished UI). -->
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
