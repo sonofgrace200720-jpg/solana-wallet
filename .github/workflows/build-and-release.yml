@@ -15,45 +15,68 @@ jobs:
 
     env:
       KEYSTORE_FILE: android/app/release.keystore
-      KEYSTORE_PASSWORD: Julianna
+      KEYSTORE_PASSWORD: Julianaifeoma$2007
       KEY_ALIAS: release
-      KEY_PASSWORD: Juliannaifeoma$2007
+      KEY_PASSWORD: Julianaifeoma$2007
 
     steps:
+
+      # ---------------------------------------------------------
+      # Checkout source code
+      # ---------------------------------------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ---------------------------------------------------------
+      # Node.js
+      # ---------------------------------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
+      # ---------------------------------------------------------
+      # Java 17
+      # ---------------------------------------------------------
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: "17"
 
+      # ---------------------------------------------------------
+      # Install npm dependencies
+      # ---------------------------------------------------------
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
       # ---------------------------------------------------------
-      # BUILD WEB ASSETS (Crucial for Capacitor)
+      # Build web app (Required for Capacitor)
       # ---------------------------------------------------------
       - name: Build web app
-        run: npm run build # Change to your framework's build command if different (e.g., ionic build)
+        run: npm run build
 
+      # ---------------------------------------------------------
+      # Add Android platform if it doesn't already exist
+      # ---------------------------------------------------------
       - name: Add Android platform
         run: |
           if [ ! -d "android" ]; then
+            echo "Android platform not found."
             npx cap add android
           else
             echo "Android platform already exists."
           fi
 
+      # ---------------------------------------------------------
+      # Sync Capacitor
+      # ---------------------------------------------------------
       - name: Sync Capacitor
         run: npx cap sync android
 
+      # ---------------------------------------------------------
+      # Check whether keystore exists
+      # ---------------------------------------------------------
       - name: Check signing keystore
         id: check_keystore
         run: |
@@ -65,10 +88,24 @@ jobs:
             echo "Signing keystore not found."
           fi
 
+      # ---------------------------------------------------------
+      # Generate keystore if it doesn't exist
+      # ---------------------------------------------------------
       - name: Generate signing keystore
         if: steps.check_keystore.outputs.exists == 'false'
         run: |
+          if [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "ERROR: KEYSTORE_PASSWORD secret is not configured."
+            exit 1
+          fi
+
+          if [ -z "$KEY_PASSWORD" ]; then
+            echo "ERROR: KEY_PASSWORD secret is not configured."
+            exit 1
+          fi
+
           mkdir -p android/app
+
           keytool -genkeypair -v \
             -keystore "$KEYSTORE_FILE" \
             -alias "$KEY_ALIAS" \
@@ -79,25 +116,54 @@ jobs:
             -keypass "$KEY_PASSWORD" \
             -dname "CN=Solana Wallet, OU=Dev, O=Solana Wallet, L=City, S=State, C=NG"
 
+          echo "Signing keystore generated successfully."
+
+      # ---------------------------------------------------------
+      # Build signed release APK
+      # ---------------------------------------------------------
       - name: Build signed release APK
         working-directory: android
         run: |
           chmod +x gradlew
+
           ./gradlew assembleRelease \
             -Pandroid.injected.signing.store.file="$GITHUB_WORKSPACE/$KEYSTORE_FILE" \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
             -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
 
+      # ---------------------------------------------------------
+      # Verify APK exists
+      # ---------------------------------------------------------
       - name: Verify APK
         run: |
           APK="android/app/build/outputs/apk/release/app-release.apk"
+
           if [ ! -f "$APK" ]; then
             echo "ERROR: APK was not generated."
             exit 1
           fi
+
+          echo "APK generated successfully:"
           ls -lh "$APK"
 
+      # ---------------------------------------------------------
+      # Verify APK signature
+      # ---------------------------------------------------------
+      - name: Verify APK signature
+        run: |
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+
+          if command -v apksigner >/dev/null 2>&1; then
+            apksigner verify --verbose "$APK"
+          else
+            echo "apksigner not found in PATH."
+            echo "Skipping explicit signature verification."
+          fi
+
+      # ---------------------------------------------------------
+      # Upload APK as GitHub Actions artifact
+      # ---------------------------------------------------------
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
@@ -105,6 +171,9 @@ jobs:
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
+      # ---------------------------------------------------------
+      # Create GitHub Release for version tags
+      # ---------------------------------------------------------
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
