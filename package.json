@@ -1,32 +1,29 @@
 {
-  "name": "solana-wallet-app",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "dev": "npx http-server src -p 8080 -c-1",
-    "sync": "cap sync android",
-    "build:android": "cap sync android && cd android && ./gradlew assembleRelease"
-  },
-  "dependencies": {
-    "@solana/web3.js": "^1.95.3",
-    "@capacitor/core": "^6.1.2",
-    "@capacitor/android": "^6.1.2",
-    "@capacitor/preferences": "^6.0.2",
-    "@capacitor/browser": "^6.0.3",
-    "@capacitor-community/barcode-scanner": "^4.0.1",
-    "capacitor-native-biometric": "^4.2.1",
-    "jspdf": "^2.5.1",
-    "qrcode": "^1.5.3",
-    "buffer": "^6.0.3"
-  },
-  "devDependencies": {
-    "@capacitor/cli": "^6.1.2",
-    "http-server": "^14.1.1"
-  },
+"name": "solana-wallet-app",
+"version": "1.0.0",
+"private": true,
 "scripts": {
-  "dev": "vite",
-  "build": "vite build",
-  "preview": "vite preview"
+"dev": "vite",
+"build": "vite build",
+"preview": "vite preview",
+"sync": "cap sync android",
+"build:android": "npm run build && cap sync android && cd android && ./gradlew assembleRelease"
+},
+"dependencies": {
+"@solana/web3.js": "^1.95.3",
+"@capacitor/core": "^6.1.2",
+"@capacitor/android": "^6.1.2",
+"@capacitor/preferences": "^6.0.2",
+"@capacitor/browser": "^6.0.3",
+"@capacitor-community/barcode-scanner": "^4.0.1",
+"capacitor-native-biometric": "^4.2.1",
+"jspdf": "^2.5.1",
+"qrcode": "^1.5.3",
+"buffer": "^6.0.3"
+},
+"devDependencies": {
+"@capacitor/cli": "^6.1.2",
+"http-server": "^14.1.1",
+"vite": "^7.1.2"
 }
-
 }
